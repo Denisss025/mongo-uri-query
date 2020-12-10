@@ -13,12 +13,12 @@ The recommended way to get started using the URI to MongoDB Query
 library is by using go modules to install the dependency in your
 project.
 This can be done by importing packages from
-`github.com/Denisss025/mongo-uri-query` and having the build step
+`github.com/garantexpress/mongo-uri-query` and having the build step
 to install the dependency.
 
 Another way is to get the library by explicitly running
 ```SH
-go get github.com/Denisss025/mongo-uri-query
+go get github.com/garantexpress/mongo-uri-query
 ```
 
 ## Usage
@@ -53,7 +53,7 @@ package example
 import (
     "net/http"
 
-    query "github.com/Denisss025/mongo-uri-query"
+    query "github.com/garantexpress/mongo-uri-query"
 
     "go.mongodb.org/mongo-driver/bson/primitive"
     "go.mongodb.org/mongo-driver/mongo"
@@ -99,5 +99,5 @@ func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 ## License
 
 The URI to MongoDB Query library is licensed under the
-[MIT License](https://github.com/Denisss025/mongo-uri-query/blob/master/LICENCE).
+[MIT License](https://github.com/garantexpress/mongo-uri-query/blob/master/LICENCE).
 
