@@ -1,5 +1,12 @@
 # URI to MongoDB Query
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/Denisss025/mongo-uri-query.svg)](https://pkg.go.dev/github.com/Denisss025/mongo-uri-query)
+[![Maintainability](https://api.codeclimate.com/v1/badges/5dcb97ef85e043fa0208/maintainability)](https://codeclimate.com/github/Denisss025/mongo-uri-query/maintainability)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/5dcb97ef85e043fa0208/test_coverage)](https://codeclimate.com/github/Denisss025/mongo-uri-query/test_coverage)
+[![Go Report Card](https://goreportcard.com/badge/Denisss025/mongo-uri-query)](https://goreportcard.com/report/Denisss025/mongo-uri-query)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Denisss025/mongo-uri-query/blob/master/LICENSE)
+
+
 The URI to MongoDB query conversion library for Go
 programming language    .
 
