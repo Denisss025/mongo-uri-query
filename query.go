@@ -120,7 +120,7 @@ func addField(filter M, field string, op operator, val interface{}) (m M) {
 	return m
 }
 
-// AppendFilter appends an operator, field and value to the filter.
+// AddFilter appends an operator, field and value to the filter.
 func (f *Query) AddFilter(field string, op operator, value interface{}) {
 	f.Filter = addField(f.Filter, field, op, value)
 }
