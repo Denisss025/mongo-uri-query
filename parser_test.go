@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -507,7 +508,7 @@ func TestNormalizeFields(t *testing.T) {
 	assert.Equal(t, expected, acquired)
 }
 
-func TestExtractVFields(ts *testing.T) {
+func TestExtractFields(ts *testing.T) {
 	ts.Parallel()
 
 	ts.Run("simple", func(t *testing.T) {
@@ -547,4 +548,26 @@ func TestExtractVFields(ts *testing.T) {
 
 		assert.Equal(t, expected, acquired)
 	})
+
+	ts.Run("convert map[like][fields] to struct.like.fields",
+		func(t *testing.T) {
+			t.Parallel()
+
+			expected := fieldsMap{
+				"field1.nested.nested2": operatorsMap{
+					operatorInArray: []string{
+						"a", "b", "c", "d",
+					},
+				},
+			}
+
+			acquired := extractFields(url.Values{
+				"field1[nested][nested2][]": []string{"a", "b"},
+				"field1.nested.nested2[]":   []string{"c"},
+				"field1[nested[nested2]][]": []string{"d"},
+			})
+
+			sort.Strings(acquired["field1.nested.nested2"][operatorInArray])
+			assert.Equal(t, expected, acquired)
+		})
 }

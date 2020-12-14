@@ -100,12 +100,22 @@ func extractFields(query url.Values) (fields fieldsMap) {
 
 		field, op := parseOperator(k)
 
+		// convert map[like][field] to struct.like.field
+		field = strings.ReplaceAll(
+			strings.ReplaceAll(field, "[", "."),
+			"]", "")
+
 		f, ok := fields[field]
 		if !ok {
 			f = make(map[operator][]string)
 		}
 
-		f[op] = v
+		if arr, hasOperator := f[op]; hasOperator {
+			f[op] = append(arr, v...)
+		} else {
+			f[op] = v
+		}
+
 		fields[field] = f
 	}
 
