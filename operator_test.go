@@ -24,19 +24,73 @@ func TestOperatorValidation(t *testing.T) {
 func TestOperatorMultiVal(t *testing.T) {
 	multiValOperators := []string{
 		"all", "eqa", "nin", "in", "rein",
-		"icoin",
+		"icoin", "[]", "ire[]", "sw[]",
 	}
 	nonMultiValOperators := []string{"eq", "exists", "gt", "lte", "ne"}
 
 	for _, op := range multiValOperators {
 		assert.True(t, operator(op).IsValid())
-		assert.True(t, operator(op).IsMultiVal())
+		assert.True(t, operator(op).IsMultiVal(),
+			"operator: %v", op)
 	}
 
 	for _, op := range nonMultiValOperators {
 		assert.True(t, operator(op).IsValid())
 		assert.False(t, operator(op).IsMultiVal())
 	}
+}
+
+func TestOperatorIs(ts *testing.T) {
+	ts.Parallel()
+
+	ts.Run("should return true", func(t *testing.T) {
+		t.Parallel()
+
+		commonTypes := map[string][]string{
+			"[]":    {"[]", "re[]", "ire[]", "co[]", "ico[], sw[]"},
+			"in":    {"in", "[]", "re[]", "ire[]", "irein", "co[]"},
+			"re":    {"re", "irein", "rein", "ire[]", "re[]", "ire"},
+			"ire[]": {"ire[]"},
+			"sw":    {"sw", "swin", "isw[]", "isw", "sw[]", "iswin"},
+			"swin":  {"iswin", "isw[]", "swin", "isw[]"},
+			"co":    {"co", "ico", "coin", "co[]", "ico[]", "icoin"},
+			"ico":   {"ico", "icoin", "ico[]"},
+			"all":   {"all", "all[]"},
+			"eq":    {"eq", "eqa"},
+		}
+
+		for common, arr := range commonTypes {
+			for _, op := range arr {
+				assert.True(t,
+					operator(op).Is(operator(common)),
+					"%s must be also %s",
+					op, common)
+			}
+		}
+	})
+
+	ts.Run("should return false", func(t *testing.T) {
+		t.Parallel()
+
+		commonTypes := map[string][]string{
+			"re[]": {"in", "[]", "co[]", "ico[], sw[]"},
+			"swin": {"in", "[]", "re[]", "ire[]", "irein", "co[]"},
+			"in":   {"re", "ire", "ico", "isw", "eq"},
+			"[]":   {"sw", "swin", "iswin", "isw", "in", "eq"},
+			"ico":  {"co", "coin", "co[]", "eq", "in", "[]"},
+			"all":  {"in", "eq", "[]", "eqa"},
+			"eqa":  {"eq", "in", "[]"},
+		}
+
+		for common, arr := range commonTypes {
+			for _, op := range arr {
+				assert.False(t,
+					operator(op).Is(operator(common)),
+					"%s must not be %s",
+					op, common)
+			}
+		}
+	})
 }
 
 //nolint:paralleltest
@@ -47,14 +101,14 @@ func TestOperatorRegex(t *testing.T) {
 	for _, op := range regexOps {
 		assert.True(t, operator(op).IsValid(),
 			"operator: %s", op)
-		assert.True(t, operator(op).IsRegexOperator(),
+		assert.True(t, operator(op).IsRegex(),
 			"operator: %s", op)
 	}
 
 	for _, op := range nonRegexOps {
 		assert.True(t, operator(op).IsValid(),
 			"operator: %s", op)
-		assert.False(t, operator(op).IsRegexOperator(),
+		assert.False(t, operator(op).IsRegex(),
 			"operator: %s", op)
 	}
 }
@@ -66,12 +120,12 @@ func TestOperatorSW(t *testing.T) {
 
 	for _, op := range swOps {
 		assert.True(t, operator(op).IsValid())
-		assert.True(t, operator(op).IsStartsWithOperator())
+		assert.True(t, operator(op).IsStartsWith())
 	}
 
 	for _, op := range nonSWOps {
 		assert.True(t, operator(op).IsValid())
-		assert.False(t, operator(op).IsStartsWithOperator())
+		assert.False(t, operator(op).IsStartsWith())
 	}
 }
 
@@ -82,12 +136,12 @@ func TestOperatorContains(t *testing.T) {
 
 	for _, op := range coOps {
 		assert.True(t, operator(op).IsValid())
-		assert.True(t, operator(op).IsContainsOperator())
+		assert.True(t, operator(op).IsContains())
 	}
 
 	for _, op := range nonCoOps {
 		assert.True(t, operator(op).IsValid())
-		assert.False(t, operator(op).IsContainsOperator())
+		assert.False(t, operator(op).IsContains())
 	}
 }
 
@@ -135,4 +189,49 @@ func TestOperatorMongoOp(t *testing.T) {
 		assert.Equal(t, mOp, operator(op).MongoOperator(),
 			"for operator: %s", op)
 	}
+}
+
+//nolint:paralleltest
+func TestParseOperator(t *testing.T) {
+	f, op := parseOperator("field[]")
+	assert.Equal(t, "field", f)
+	assert.Equal(t, operatorInArray, op)
+	assert.True(t, op.IsValid())
+	assert.True(t, op.IsMultiVal())
+	assert.False(t, op.NeedSplitString())
+	assert.True(t, operatorIn.NeedSplitString())
+	assert.Equal(t, "$in", op.MongoOperator())
+	assert.Equal(t, operatorEquals, op.SingleValueOperator())
+	assert.True(t, op.Is(operatorIn))
+	assert.False(t, op.IsRegex())
+	assert.False(t, op.IsStartsWith())
+	assert.False(t, op.IsContains())
+
+	f, op = parseOperator("field__all[]")
+	assert.Equal(t, "field", f)
+	assert.Equal(t, operatorAllArray, op)
+	assert.False(t, op.Is(operatorIn))
+	assert.True(t, op.Is(operatorAllArray))
+	assert.True(t, op.IsValid())
+	assert.True(t, op.IsMultiVal())
+	assert.False(t, op.NeedSplitString())
+	assert.True(t, operatorAll.NeedSplitString())
+	assert.Equal(t, "$all", op.MongoOperator())
+	assert.Equal(t, operatorEquals, op.SingleValueOperator())
+	assert.False(t, op.IsRegex())
+	assert.False(t, op.IsStartsWith())
+	assert.False(t, op.IsContains())
+
+	f, op = parseOperator("field__ire[]")
+	assert.Equal(t, "field", f)
+	assert.Equal(t, operatorRegexInArrayIgnoreCase, op)
+	assert.True(t, op.IsValid())
+	assert.True(t, op.IsMultiVal())
+	assert.False(t, op.NeedSplitString())
+	assert.True(t, operatorRegexIn.NeedSplitString())
+	assert.Equal(t, "$in", op.MongoOperator())
+	assert.Equal(t, operatorRegexIgnoreCase, op.SingleValueOperator())
+	assert.True(t, op.IsRegex())
+	assert.False(t, op.IsStartsWith())
+	assert.False(t, op.IsContains())
 }

@@ -34,7 +34,7 @@ func TestMapValues(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestParse(ts *testing.T) {
+func TestConvertArray(ts *testing.T) {
 	ts.Parallel()
 
 	conv := NewDefaultConverter(testOidPrimitive{})
@@ -46,10 +46,10 @@ func TestParse(ts *testing.T) {
 		int64(123), 213.0,
 	}
 
-	ts.Run("correct parse routine", func(t *testing.T) {
+	ts.Run("correct convertArray routine", func(t *testing.T) {
 		t.Parallel()
 
-		v, err := parse(testValues, operatorEqualArray, conv)
+		v, err := convertArray(testValues, operatorEqualArray, conv)
 		assert.NoError(t, err)
 		assert.Equal(t, expect, v)
 	})
@@ -57,7 +57,7 @@ func TestParse(ts *testing.T) {
 	ts.Run("$eq for multiple values returns error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := parse(testValues, operatorEquals, conv)
+		_, err := convertArray(testValues, operatorEquals, conv)
 		assert.EqualError(t, err, ErrTooManyValues.Error())
 	})
 
@@ -65,31 +65,22 @@ func TestParse(ts *testing.T) {
 		t.Parallel()
 
 		test := strings.Join(testValues, ",")
-		v, err := parse([]string{test}, operatorEquals, conv)
+		v, err := convertArray([]string{test}, operatorEquals, conv)
 		assert.NoError(t, err)
 		assert.Equal(t, test, v)
-	})
-
-	ts.Run("split string for multival operator", func(t *testing.T) {
-		t.Parallel()
-
-		test := strings.Join(testValues, ",")
-		v, err := parse([]string{test}, operatorContainsIn, conv)
-		assert.NoError(t, err)
-		assert.Equal(t, expect, v)
 	})
 
 	ts.Run("return error without converter", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := parse(testValues, operatorIn, nil)
+		_, err := convertArray(testValues, operatorIn, nil)
 		assert.EqualError(t, err, ErrNoConverter.Error())
 	})
 
 	ts.Run("return an error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := parse(testValues, operatorAll, Bool())
+		_, err := convertArray(testValues, operatorAll, Bool())
 		assert.True(t, errors.Is(err, ErrNoMatch),
 			"unexpected err: %v", err)
 	})
@@ -97,7 +88,7 @@ func TestParse(ts *testing.T) {
 	ts.Run("return nil for empty array", func(t *testing.T) {
 		t.Parallel()
 
-		v, err := parse(nil, operatorNotEquals, Int())
+		v, err := convertArray(nil, operatorNotEquals, Int())
 		assert.NoError(t, err)
 		assert.Nil(t, v)
 	})
@@ -151,7 +142,7 @@ func TestParserRegexEscape(ts *testing.T) {
 	})
 }
 
-func TestParserGetValue(ts *testing.T) {
+func TestParserConvert(ts *testing.T) {
 	ts.Parallel()
 
 	p := Parser{
@@ -172,26 +163,18 @@ func TestParserGetValue(ts *testing.T) {
 		ValidateFields: true,
 	}
 
-	ts.Run("invalid operator", func(t *testing.T) {
-		t.Parallel()
-
-		_, _, _, err := p.getValue("field1__test", []string{"1"})
-		assert.EqualError(t, err,
-			fmt.Sprintf("%v: test", ErrUnknownOperator))
-	})
-
 	ts.Run("validate fields: no field spec", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, _, err := p2.getValue("field4", []string{"1"})
+		_, err := p2.convert("field4", operatorEquals, []string{"1"})
 		assert.EqualError(t, err,
 			fmt.Sprintf("%v: field4", ErrNoFieldSpec))
 	})
 
-	ts.Run("parse error", func(t *testing.T) {
+	ts.Run("convertArray error", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, _, err := p2.getValue("field3", []string{"1"})
+		_, err := p2.convert("field3", operatorEquals, []string{"1"})
 		assert.EqualError(t, err,
 			fmt.Sprintf("convert field3: %v", ErrNoMatch))
 	})
@@ -199,14 +182,11 @@ func TestParserGetValue(ts *testing.T) {
 	ts.Run("operator exists must be boolean", func(t *testing.T) {
 		t.Parallel()
 
-		field, op, val, err := p.getValue("test__exists",
-			[]string{"yes"})
+		val, err := p.convert("test", operatorExists, []string{"yes"})
 		assert.NoError(t, err)
-		assert.Equal(t, "test", field)
 		assert.Equal(t, true, val)
-		assert.Equal(t, operatorExists, op)
 
-		_, _, _, err = p.getValue("test__exists", []string{"1"})
+		_, err = p.convert("test", operatorExists, []string{"1"})
 		assert.EqualError(t, err,
 			fmt.Sprintf("convert test: %v", ErrNoMatch))
 	})
@@ -214,11 +194,9 @@ func TestParserGetValue(ts *testing.T) {
 	ts.Run("regex operator", func(t *testing.T) {
 		t.Parallel()
 
-		field, op, val, err := p.getValue("test__rein",
+		val, err := p.convert("test", operatorRegexIn,
 			[]string{"[0-9]*", "[a-f]*"})
 		assert.NoError(t, err)
-		assert.Equal(t, "test", field)
-		assert.Equal(t, operatorRegexIn, op)
 		assert.Equal(t, []interface{}{
 			testRegEx{regex: "[0-9]*"}, testRegEx{regex: "[a-f]*"},
 		}, val)
@@ -227,22 +205,20 @@ func TestParserGetValue(ts *testing.T) {
 	ts.Run("starts-with operator", func(t *testing.T) {
 		t.Parallel()
 
-		field, op, val, err := p.getValue("test__isw", []string{"^"})
+		val, err := p.convert("test", operatorStartsWithIgnoreCase,
+			[]string{"^"})
 		assert.NoError(t, err)
-		assert.Equal(t, "test", field)
-		assert.Equal(t, operatorStartsWithIgnoreCase, op)
 		assert.Equal(t, testRegEx{regex: "^\\^", options: "i"}, val)
 	})
 
 	ts.Run("contains operator", func(t *testing.T) {
 		t.Parallel()
 
-		field, op, val, err := p.getValue("test__icoin", []string{"$"})
+		val, err := p.convert("test", operatorContainsInIgnoreCase,
+			[]string{"$,x"})
 		assert.NoError(t, err)
-		assert.Equal(t, "test", field)
-		assert.Equal(t, operatorContainsInIgnoreCase, op)
 		assert.Equal(t, []interface{}{
-			testRegEx{regex: "\\$", options: "i"},
+			testRegEx{regex: "\\$,x", options: "i"},
 		}, val)
 	})
 }
@@ -421,5 +397,154 @@ func TestParserParse(ts *testing.T) {
 		assert.Equal(t, map[string]int{"required": -1}, filter.Sort)
 		assert.Equal(t, M{"required": M{"$exists": true}},
 			filter.Filter)
+	})
+}
+
+func TestParserParseMultivalue(ts *testing.T) {
+	ts.Parallel()
+
+	p := Parser{
+		Converter: NewDefaultConverter(testOidPrimitive{}),
+	}
+
+	ts.Run("__in with single value should be treated as eq",
+		func(t *testing.T) {
+			t.Parallel()
+
+			q, err := p.Parse(url.Values{"field__in": []string{"a"}})
+			assert.NoError(t, err)
+			assert.Equal(t, M{"field": "a"}, q.Filter)
+		})
+
+	ts.Run("__in parameter should split string with commas",
+		func(t *testing.T) {
+			t.Parallel()
+
+			q, err := p.Parse(url.Values{"field__in": []string{"a,b"}})
+			assert.NoError(t, err)
+			assert.Equal(t, M{"field": M{"$in": []interface{}{"a", "b"}}},
+				q.Filter)
+		})
+
+	ts.Run("[] should be treated as __in", func(t *testing.T) {
+		t.Parallel()
+
+		q, err := p.Parse(url.Values{"field[]": []string{"a", "b"}})
+		assert.NoError(t, err)
+		assert.Equal(t, M{"field": M{"$in": []interface{}{"a", "b"}}},
+			q.Filter)
+	})
+
+	ts.Run("[] parameter should not split string with commas",
+		func(t *testing.T) {
+			t.Parallel()
+
+			q, err := p.Parse(url.Values{"field[]": []string{"a,b"}})
+			assert.NoError(t, err)
+			assert.Equal(t, M{"field": "a,b"}, q.Filter)
+		})
+
+	ts.Run("treat re[] as rein", func(t *testing.T) {
+		t.Parallel()
+
+		q, err := p.Parse(url.Values{
+			"field__rein": []string{"a"},
+			"field__re[]": []string{"b"},
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, M{"field": M{"$in": []interface{}{
+			testRegEx{regex: "a"},
+			testRegEx{regex: "b"},
+		}}}, q.Filter)
+	})
+}
+
+//nolint:paralleltest
+func TestNormalizeFields(t *testing.T) {
+	expected := fieldsMap{
+		"field1": operatorsMap{
+			operatorIn: []string{"a", "b", "c"},
+		},
+		"field2": operatorsMap{
+			operatorEquals: []string{"a,b,c"},
+		},
+		"field3": operatorsMap{
+			operatorIn: []string{"a,b,c", "d"},
+		},
+		"field4": operatorsMap{
+			operatorIn: []string{"b", "a"},
+		},
+		"field5": operatorsMap{
+			operatorEquals: []string{"a"},
+		},
+	}
+
+	acquired := normailzeFields(fieldsMap{
+		// split string
+		"field1": operatorsMap{
+			operatorIn: []string{"a,b,c"},
+		},
+		// convert $in to $eq, do not split string for []
+		"field2": operatorsMap{
+			operatorInArray: []string{"a,b,c"},
+		},
+		// do not split string
+		"field3": operatorsMap{
+			operatorIn: []string{"a,b,c", "d"},
+		},
+		// merge __in and [] to $in
+		"field4": operatorsMap{
+			operatorInArray: []string{"a"},
+			operatorIn:      []string{"b"},
+		},
+		// convert $in to $eq
+		"field5": operatorsMap{
+			operatorIn: []string{"a"},
+		},
+	})
+
+	assert.Equal(t, expected, acquired)
+}
+
+func TestExtractVFields(ts *testing.T) {
+	ts.Parallel()
+
+	ts.Run("simple", func(t *testing.T) {
+		t.Parallel()
+
+		expected := fieldsMap{
+			"field1": operatorsMap{
+				operatorIn: []string{"a", "b", "c"},
+			},
+			"field2": operatorsMap{
+				operatorRegexIn: []string{"a", "b"},
+			},
+		}
+
+		acquired := extractFields(url.Values{
+			"field1__in":   []string{"a,b,c"},
+			"field2__re[]": []string{"b"},
+			"field2__rein": []string{"a"},
+		})
+
+		assert.Equal(t, expected, acquired)
+	})
+
+	ts.Run("rein and re[] should be merged", func(t *testing.T) {
+		t.Parallel()
+
+		expected := fieldsMap{
+			"field": operatorsMap{
+				operatorRegexIn: []string{"a", "b"},
+			},
+		}
+
+		acquired := extractFields(url.Values{
+			"field__rein": []string{"a"},
+			"field__re[]": []string{"b"},
+		})
+
+		assert.Equal(t, expected, acquired)
 	})
 }
