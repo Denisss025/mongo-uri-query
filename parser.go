@@ -36,6 +36,92 @@ type Parser struct {
 	rxRegEscape   *strings.Replacer
 }
 
+type operatorsMap = map[operator][]string
+
+type fieldsMap = map[string]map[operator][]string
+
+func normailzeFields(fields fieldsMap) (normalized fieldsMap) {
+	normalized = make(fieldsMap)
+
+	for field, ops := range fields {
+		normalized[field] = make(operatorsMap)
+
+		for op, arr := range ops {
+			cop := op.CommonOperator()
+			if op == cop {
+				continue
+			}
+
+			common, exists := ops[cop]
+			if exists {
+				normalized[field][cop] = append(common, arr...)
+			} else {
+				normalized[field][op] = arr
+			}
+		}
+	}
+
+	for field, ops := range fields {
+		ff := normalized[field]
+
+		for op, arr := range ops {
+			commonOp := op.CommonOperator()
+			commonArr, hasOp := ff[commonOp]
+
+			if hasOp && len(commonArr) > 1 {
+				continue
+			}
+
+			if len(arr) == 1 && op.NeedSplitString() {
+				arr = strings.Split(arr[0], arrayDelimiter)
+			}
+
+			if len(arr) == 1 {
+				delete(ff, op)
+				op = op.SingleValueOperator()
+			}
+
+			ff[op] = arr
+		}
+
+		normalized[field] = ff
+	}
+
+	return normalized
+}
+
+func extractFields(query url.Values) (fields fieldsMap) {
+	fields = make(fieldsMap)
+
+	for k, v := range query {
+		if strings.HasPrefix(k, delimiter) {
+			continue
+		}
+
+		field, op := parseOperator(k)
+
+		// convert map[like][field] to struct.like.field
+		field = strings.ReplaceAll(
+			strings.ReplaceAll(field, "[", "."),
+			"]", "")
+
+		f, ok := fields[field]
+		if !ok {
+			f = make(map[operator][]string)
+		}
+
+		if arr, hasOperator := f[op]; hasOperator {
+			f[op] = append(arr, v...)
+		} else {
+			f[op] = v
+		}
+
+		fields[field] = f
+	}
+
+	return normailzeFields(fields)
+}
+
 func mapValues(values []string, c Converter) (i []interface{}, err error) {
 	i = make([]interface{}, len(values))
 
@@ -48,7 +134,7 @@ func mapValues(values []string, c Converter) (i []interface{}, err error) {
 	return i, nil
 }
 
-func parse(v []string, op operator, c Converter) (
+func convertArray(v []string, op operator, c Converter) (
 	value interface{}, err error) {
 	if c == nil {
 		return nil, ErrNoConverter
@@ -59,10 +145,6 @@ func parse(v []string, op operator, c Converter) (
 	}
 
 	if op.IsMultiVal() {
-		if len(v) == 1 {
-			v = strings.Split(v[0], arrayDelimiter)
-		}
-
 		return mapValues(v, c)
 	}
 
@@ -109,47 +191,36 @@ func (p *Parser) regEscape(val string) (escaped string) {
 	return p.rxRegEscape.Replace(val)
 }
 
-func (p *Parser) getValue(param string, v []string) (
-	field string, op operator, value interface{}, err error) {
-	field, op = param, operatorEquals
-
-	if pos := strings.Index(param, delimiter); pos > 0 {
-		field, op = param[:pos], operator(param[pos+len(delimiter):])
-	}
-
-	if !op.IsValid() {
-		return "", "", nil,
-			fmt.Errorf("%w: %s", ErrUnknownOperator, string(op))
-	}
-
+func (p *Parser) convert(field string, op operator, v []string) (
+	value interface{}, err error) {
 	conv, hasField := p.Fields.Converter(field)
 	if !hasField {
+		if p.ValidateFields {
+			return nil,
+				fmt.Errorf("%w: %s", ErrNoFieldSpec, field)
+		}
+
 		conv = p.Converter
 
 		if op == operatorExists {
 			conv = p.Converter.Bool
 		}
-
-		if p.ValidateFields {
-			return "", "", nil,
-				fmt.Errorf("%w: %s", ErrNoFieldSpec, field)
-		}
 	}
 
 	switch {
-	case op.IsRegexOperator():
+	case op.IsRegex():
 		conv = ConvertFunc(
 			func(val string) (rx interface{}, err error) {
 				return p.Converter.Primitives.RegEx(
 					val, op.RegexOpts())
 			})
-	case op.IsContainsOperator():
+	case op.IsContains():
 		conv = ConvertFunc(
 			func(val string) (rx interface{}, err error) {
 				return p.Converter.Primitives.RegEx(
 					p.regEscape(val), op.RegexOpts())
 			})
-	case op.IsStartsWithOperator():
+	case op.IsStartsWith():
 		conv = ConvertFunc(
 			func(val string) (rx interface{}, err error) {
 				return p.Converter.Primitives.RegEx(
@@ -158,13 +229,12 @@ func (p *Parser) getValue(param string, v []string) (
 			})
 	}
 
-	value, err = parse(v, op, conv)
+	value, err = convertArray(v, op, conv)
 	if err != nil {
-		err = fmt.Errorf("convert %s: %w", field, err)
-		field, op, value = "", "", nil
+		return nil, fmt.Errorf("convert %s: %w", field, err)
 	}
 
-	return field, op, value, err
+	return value, err
 }
 
 func getSortFields(params url.Values) (sortFields []string) {
@@ -184,19 +254,20 @@ func getSortFields(params url.Values) (sortFields []string) {
 	return
 }
 
-func (p *Parser) parseFilter(params url.Values) (
+func (p *Parser) parseFilter(query url.Values) (
 	filter Query, errs *multierror.Error) {
-	for k, v := range params {
-		if strings.HasPrefix(k, delimiter) {
-			continue
-		}
+	fields := extractFields(query)
 
-		fieldName, op, value, parseErr := p.getValue(k, v)
-		if parseErr != nil {
-			errs = multierror.Append(errs,
-				fmt.Errorf("filter: %w: %s", parseErr, k))
-		} else {
-			filter.AddFilter(fieldName, op, value)
+	for field, operators := range fields {
+		for op, values := range operators {
+			value, parseErr := p.convert(field, op, values)
+			if parseErr != nil {
+				errs = multierror.Append(errs,
+					fmt.Errorf("filter: %w: %s[%v]",
+						parseErr, field, op))
+			} else {
+				filter.AddFilter(field, op, value)
+			}
 		}
 	}
 
