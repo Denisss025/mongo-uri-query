@@ -27,9 +27,15 @@ const (
 	sortDesc       = -1
 )
 
+// Parser is a structure that parses url queries.
 type Parser struct {
-	Converter      *TypeConverter
-	Fields         Fields
+	// Converter is a TypeConverter that converts unspecified fields.
+	Converter *TypeConverter
+	// Fields is a fields specification.
+	Fields Fields
+	// ValidateFields enables or disables field specification validator.
+	// When true, the parser will return ErrNoFieldSpec for every
+	// unspecified field in url query.
 	ValidateFields bool
 
 	initRegescape sync.Once
@@ -284,8 +290,8 @@ func (p *Parser) parseFilter(query url.Values) (
 	return filter, errs
 }
 
-func (p *Parser) Parse(params url.Values) (
-	filter Query, err error) {
+// Parse parses a given url query.
+func (p *Parser) Parse(params url.Values) (filter Query, err error) {
 	var errs *multierror.Error
 
 	filter, errs = p.parseFilter(params)
