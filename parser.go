@@ -127,19 +127,17 @@ func convertArray(v []string, op operator, c Converter) (
 		return nil, ErrNoConverter
 	}
 
-	if len(v) == 0 {
-		return nil, nil
-	}
-
 	if op.IsMultiVal() {
 		return mapValues(v, c)
 	}
 
 	if len(v) > 1 {
-		return nil, ErrTooManyValues
+		err = ErrTooManyValues
+	} else if len(v) == 1 {
+		value, err = c.Convert(v[0])
 	}
 
-	return c.Convert(v[0])
+	return value, err
 }
 
 func parseIntParam(params url.Values, name string) (val int64, err error) {
