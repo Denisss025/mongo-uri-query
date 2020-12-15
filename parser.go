@@ -176,6 +176,26 @@ func (p *Parser) regEscape(val string) (escaped string) {
 	return p.rxRegEscape.Replace(val)
 }
 
+func (p *Parser) regex(reOptions string, translate func(string) string) (
+	conv ConvertFunc) {
+	if p.Converter.Primitives == nil {
+		return nil
+	}
+
+	return func(val string) (rx interface{}, err error) {
+		return p.Converter.Primitives.RegEx(
+			translate(val), reOptions)
+	}
+}
+
+func nop() (translate func(string) string) {
+	return func(a string) string { return a }
+}
+
+func sw(f func(string) string) (translate func(string) string) {
+	return func(a string) string { return "^" + f(a) }
+}
+
 func (p *Parser) convert(field string, op operator, v []string) (
 	value interface{}, err error) {
 	conv, hasField := p.Fields.Converter(field)
@@ -194,24 +214,11 @@ func (p *Parser) convert(field string, op operator, v []string) (
 
 	switch {
 	case op.IsRegex():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					val, op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), nop())
 	case op.IsContains():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					p.regEscape(val), op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), p.regEscape)
 	case op.IsStartsWith():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					"^"+p.regEscape(val),
-					op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), sw(p.regEscape))
 	}
 
 	value, err = convertArray(v, op, conv)
