@@ -90,7 +90,7 @@ func NewHandler() *RequestHandler {
 func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     var coll *mongo.Collection
     ...
-    q, err := h.parser.Parse(r.URI.Query())
+    q, err := h.parser.Parse(r.URL.Query())
     if err != nil { ... }
 
     cursor, err := coll.Find(r.Context(), q.Filter, &options.FindOptions{
@@ -102,6 +102,65 @@ func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     ...
 }
 ```
+
+## API Reference
+
+### Create a parser
+
+The parser is a structure that has a `Parse()` function that can process the request query.
+You can create as many instances as you like, but typically your app would need only one.
+The behaviour of the parser is controlled with `TypeConverter`, `Fields` and `ValidateFields`
+member fields.
+
+```Go
+parser := query.Parser{TypeConverter: ..., Fields: ..., ValidateFields: ...}
+```
+
+#### Fields
+
+* `TypeConverter` is a structure that is able to automatically detect value type
+  and convert string to it.
+
+* `Fields` is a map that holds fields specifications:
+
+  * `Required`: the parser checks all the required fields to be given in a query.
+ 
+  * `Converter` is a custom type converter for a given field.
+ 
+* `ValidateFields`: when `true` the parser checks every given query param to be present in
+   the `Fields` map.
+   
+The `TypeConverter` can be created either with `NewConverter()` or with `NewDefaultConverter()`
+functions. The `NewDefaultConverter()` function creates a `TypeConverter` that automatically
+detects such types as `ObjectID` (`[0-9a-f]{12}`), `int64`, `float64`, `bool` (`true|yes|false|no`) and `time.Time` (i.e. `2006-01-02T15:04:05Z0700`).
+
+The `TypeConverter` also has a `Primitives` field which is used to convert strings to `ObjectID` and `RegEx`.
+`Primitives` is an interface with two functions:
+
+```Go
+type Primitives interface {
+    RegEx(val, opts string) (interface{}, error)
+    ObjectID(val string) (interface{}, error)
+}```
+
+The `RegEx()` function is used with `re`, `co` and `sw` operators.
+
+### Parse a query
+
+```q, err := parser.Parse(r.URL.Query())```
+
+`r` is a pointer to an `http.Request{}`, `q` is a `Query{}`.
+
+The `Query{}` structure has `Filter`, `Sort`, `Limit` and `Skip` fields.
+
+* `Filter` is a mongo-db find filter.
+
+* `Sort` is a mongo-db sort specification.
+
+* `Limit` is a value for `Cursor.Limit()` to limit the number of documents in the query result.
+
+* `Skip` is a value for `Cursor.Skip()` to skip the number of documents in the query result.
+
 
 ## License
 
