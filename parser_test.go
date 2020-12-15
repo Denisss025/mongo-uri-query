@@ -582,7 +582,7 @@ func TestExtractFields(ts *testing.T) {
 				"field1[nested[nested2]][]": []string{"d"},
 			})
 
-			sort.Strings(acquired["field1.nested.nested2"][operatorInArray])
+			sort.Strings(acquired["field1.nested.nested2"][operatorIn])
 			assert.Equal(t, expected, acquired)
 		})
 }
