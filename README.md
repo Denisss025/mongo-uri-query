@@ -141,13 +141,16 @@ The `TypeConverter` also has a `Primitives` field which is used to convert strin
 type Primitives interface {
     RegEx(val, opts string) (interface{}, error)
     ObjectID(val string) (interface{}, error)
-}```
+}
+```
 
 The `RegEx()` function is used with `re`, `co` and `sw` operators.
 
 ### Parse a query
 
-```q, err := parser.Parse(r.URL.Query())```
+```Go
+q, err := parser.Parse(r.URL.Query())
+```
 
 `r` is a pointer to an `http.Request{}`, `q` is a `Query{}`.
 
