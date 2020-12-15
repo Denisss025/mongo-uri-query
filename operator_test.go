@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,11 +33,17 @@ func TestOperatorMultiVal(t *testing.T) {
 		assert.True(t, operator(op).IsValid())
 		assert.True(t, operator(op).IsMultiVal(),
 			"operator: %v", op)
+		assert.Equal(t, strings.HasSuffix(op, "in") ||
+			op == "all" || op == "eqa",
+			operator(op).NeedSplitString(),
+			"operator %s needs string splitting: %v",
+			op, !operator(op).NeedSplitString())
 	}
 
 	for _, op := range nonMultiValOperators {
 		assert.True(t, operator(op).IsValid())
 		assert.False(t, operator(op).IsMultiVal())
+		assert.False(t, operator(op).NeedSplitString())
 	}
 }
 
@@ -76,10 +83,13 @@ func TestOperatorIs(ts *testing.T) {
 			"re[]": {"in", "[]", "co[]", "ico[], sw[]"},
 			"swin": {"in", "[]", "re[]", "ire[]", "irein", "co[]"},
 			"in":   {"re", "ire", "ico", "isw", "eq"},
-			"[]":   {"sw", "swin", "iswin", "isw", "in", "eq"},
-			"ico":  {"co", "coin", "co[]", "eq", "in", "[]"},
-			"all":  {"in", "eq", "[]", "eqa"},
-			"eqa":  {"eq", "in", "[]"},
+			"[]": {
+				"sw", "swin", "iswin", "isw",
+				"in", "eq", "all", "eqa",
+			},
+			"ico": {"co", "coin", "co[]", "eq", "in", "[]"},
+			"all": {"in", "eq", "[]", "eqa"},
+			"eqa": {"eq", "in", "[]"},
 		}
 
 		for common, arr := range commonTypes {

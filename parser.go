@@ -50,44 +50,25 @@ func normailzeFields(fields fieldsMap) (normalized fieldsMap) {
 	normalized = make(fieldsMap)
 
 	for field, ops := range fields {
-		normalized[field] = make(operatorsMap)
+		ff := make(operatorsMap)
 
 		for op, arr := range ops {
 			cop := op.CommonOperator()
-			if op == cop {
-				continue
-			}
-
-			common, exists := ops[cop]
-			if exists {
-				normalized[field][cop] = append(common, arr...)
-			} else {
-				normalized[field][op] = arr
-			}
-		}
-	}
-
-	for field, ops := range fields {
-		ff := normalized[field]
-
-		for op, arr := range ops {
-			commonOp := op.CommonOperator()
-			commonArr, hasOp := ff[commonOp]
-
-			if hasOp && len(commonArr) > 1 {
-				continue
-			}
 
 			if len(arr) == 1 && op.NeedSplitString() {
 				arr = strings.Split(arr[0], arrayDelimiter)
 			}
 
-			if len(arr) == 1 {
-				delete(ff, op)
-				op = op.SingleValueOperator()
+			ff[cop] = append(ff[cop], arr...)
+		}
+
+		for op, arr := range ff {
+			if len(arr) != 1 || !op.IsMultiVal() {
+				continue
 			}
 
-			ff[op] = arr
+			ff[op.SingleValueOperator()] = arr
+			delete(ff, op)
 		}
 
 		normalized[field] = ff

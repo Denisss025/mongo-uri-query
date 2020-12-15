@@ -454,10 +454,22 @@ func TestParserParseMultivalue(ts *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, M{"field": M{"$in": []interface{}{
-			testRegEx{regex: "a"},
-			testRegEx{regex: "b"},
-		}}}, q.Filter)
+		assert.Len(t, q.Filter, 1)
+		assert.NotNil(t, q.Filter["field"])
+		assert.NotNil(t, q.Filter["field"].(M))
+		assert.Len(t, q.Filter["field"], 1)
+
+		in := q.Filter["field"].(M)["$in"]
+		assert.NotNil(t, in)
+
+		inArr := in.([]interface{})
+		assert.Len(t, inArr, 2)
+
+		i1, i2 := inArr[0].(testRegEx), inArr[1].(testRegEx)
+		assert.True(t, i1.regex != i2.regex && (i1.regex == "a" || i1.regex == "b"))
+		assert.True(t, i1.regex != i2.regex && (i2.regex == "a" || i2.regex == "b"))
+		assert.Zero(t, i1.options)
+		assert.Zero(t, i2.options)
 	})
 }
 
@@ -474,7 +486,7 @@ func TestNormalizeFields(t *testing.T) {
 			operatorIn: []string{"a,b,c", "d"},
 		},
 		"field4": operatorsMap{
-			operatorIn: []string{"b", "a"},
+			operatorIn: []string{"a", "b"},
 		},
 		"field5": operatorsMap{
 			operatorEquals: []string{"a"},
@@ -505,6 +517,7 @@ func TestNormalizeFields(t *testing.T) {
 		},
 	})
 
+	sort.Strings(acquired["field4"][operatorIn])
 	assert.Equal(t, expected, acquired)
 }
 
@@ -529,6 +542,7 @@ func TestExtractFields(ts *testing.T) {
 			"field2__rein": []string{"a"},
 		})
 
+		sort.Strings(acquired["field2"][operatorRegexIn])
 		assert.Equal(t, expected, acquired)
 	})
 
@@ -546,6 +560,7 @@ func TestExtractFields(ts *testing.T) {
 			"field__re[]": []string{"b"},
 		})
 
+		sort.Strings(acquired["field"][operatorRegexIn])
 		assert.Equal(t, expected, acquired)
 	})
 
@@ -555,7 +570,7 @@ func TestExtractFields(ts *testing.T) {
 
 			expected := fieldsMap{
 				"field1.nested.nested2": operatorsMap{
-					operatorInArray: []string{
+					operatorIn: []string{
 						"a", "b", "c", "d",
 					},
 				},
