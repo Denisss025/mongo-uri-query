@@ -74,7 +74,7 @@ func (p MongoPrimitives) ObjectID(val string) (interface{}, error) {
 }
 
 func (p MongoPrimitives) RegEx(val, opts string) (interface{}, error) {
-    return primitive.RegEx{Pattern: val, Options: opts}, nil
+    return primitive.Regex{Pattern: val, Options: opts}, nil
 }
 
 type RequestHandler struct {
@@ -90,7 +90,7 @@ func NewHandler() *RequestHandler {
 func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     var coll *mongo.Collection
     ...
-    q, err := h.Parse(r.URI.Query())
+    q, err := h.parser.Parse(r.URI.Query())
     if err != nil { ... }
 
     cursor, err := coll.Find(r.Context(), q.Filter, &options.FindOptions{
