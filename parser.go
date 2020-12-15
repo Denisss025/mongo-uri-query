@@ -50,44 +50,25 @@ func normailzeFields(fields fieldsMap) (normalized fieldsMap) {
 	normalized = make(fieldsMap)
 
 	for field, ops := range fields {
-		normalized[field] = make(operatorsMap)
+		ff := make(operatorsMap)
 
 		for op, arr := range ops {
 			cop := op.CommonOperator()
-			if op == cop {
-				continue
-			}
-
-			common, exists := ops[cop]
-			if exists {
-				normalized[field][cop] = append(common, arr...)
-			} else {
-				normalized[field][op] = arr
-			}
-		}
-	}
-
-	for field, ops := range fields {
-		ff := normalized[field]
-
-		for op, arr := range ops {
-			commonOp := op.CommonOperator()
-			commonArr, hasOp := ff[commonOp]
-
-			if hasOp && len(commonArr) > 1 {
-				continue
-			}
 
 			if len(arr) == 1 && op.NeedSplitString() {
 				arr = strings.Split(arr[0], arrayDelimiter)
 			}
 
-			if len(arr) == 1 {
-				delete(ff, op)
-				op = op.SingleValueOperator()
+			ff[cop] = append(ff[cop], arr...)
+		}
+
+		for op, arr := range ff {
+			if len(arr) != 1 || !op.IsMultiVal() {
+				continue
 			}
 
-			ff[op] = arr
+			ff[op.SingleValueOperator()] = arr
+			delete(ff, op)
 		}
 
 		normalized[field] = ff
@@ -146,19 +127,17 @@ func convertArray(v []string, op operator, c Converter) (
 		return nil, ErrNoConverter
 	}
 
-	if len(v) == 0 {
-		return nil, nil
-	}
-
 	if op.IsMultiVal() {
 		return mapValues(v, c)
 	}
 
 	if len(v) > 1 {
-		return nil, ErrTooManyValues
+		err = ErrTooManyValues
+	} else if len(v) == 1 {
+		value, err = c.Convert(v[0])
 	}
 
-	return c.Convert(v[0])
+	return value, err
 }
 
 func parseIntParam(params url.Values, name string) (val int64, err error) {
@@ -197,6 +176,26 @@ func (p *Parser) regEscape(val string) (escaped string) {
 	return p.rxRegEscape.Replace(val)
 }
 
+func (p *Parser) regex(reOptions string, translate func(string) string) (
+	conv ConvertFunc) {
+	if p.Converter.Primitives == nil {
+		return nil
+	}
+
+	return func(val string) (rx interface{}, err error) {
+		return p.Converter.Primitives.RegEx(
+			translate(val), reOptions)
+	}
+}
+
+func nop() (translate func(string) string) {
+	return func(a string) string { return a }
+}
+
+func sw(f func(string) string) (translate func(string) string) {
+	return func(a string) string { return "^" + f(a) }
+}
+
 func (p *Parser) convert(field string, op operator, v []string) (
 	value interface{}, err error) {
 	conv, hasField := p.Fields.Converter(field)
@@ -215,24 +214,11 @@ func (p *Parser) convert(field string, op operator, v []string) (
 
 	switch {
 	case op.IsRegex():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					val, op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), nop())
 	case op.IsContains():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					p.regEscape(val), op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), p.regEscape)
 	case op.IsStartsWith():
-		conv = ConvertFunc(
-			func(val string) (rx interface{}, err error) {
-				return p.Converter.Primitives.RegEx(
-					"^"+p.regEscape(val),
-					op.RegexOpts())
-			})
+		conv = p.regex(op.RegexOpts(), sw(p.regEscape))
 	}
 
 	value, err = convertArray(v, op, conv)

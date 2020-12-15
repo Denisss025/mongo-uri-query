@@ -50,33 +50,16 @@ func appendArray(array, values interface{}) (retval interface{}) {
 	fArray, isFArray := array.(mongoArray)
 	vArray, isVarray := values.(mongoArray)
 
-	if array != nil && isFArray {
-		if isVarray {
-			return append(fArray, vArray...)
-		}
-
-		return append(fArray, values)
+	if array != nil && !isFArray {
+		fArray = make(mongoArray, 1, len(vArray)+2)
+		fArray[0] = array
 	}
 
-	if isVarray {
-		fArray = make(mongoArray, len(vArray)+1)
-
-		if array == nil {
-			copy(fArray, vArray)
-			fArray = fArray[:len(fArray)-1]
-		} else {
-			fArray[0] = array
-			copy(fArray[1:], vArray)
-		}
-
-		return fArray
+	if values != nil && !isVarray {
+		vArray = mongoArray{values}
 	}
 
-	if array == nil {
-		return mongoArray{values}
-	}
-
-	return mongoArray{array, values}
+	return append(fArray, vArray...)
 }
 
 func addField(filter M, field string, op operator, val interface{}) (m M) {
