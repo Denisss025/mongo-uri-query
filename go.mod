@@ -1,4 +1,4 @@
-module github.com/garantexpress/mongo-uri-query
+module github.com/Denisss025/mongo-uri-query
 
 go 1.15
 
