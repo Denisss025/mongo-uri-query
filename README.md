@@ -104,8 +104,18 @@ func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q, err := h.parser.Parse(r.URL.Query())
 	if err != nil { ... }
 
-	cursor, err := coll.Find(q.Filter).Limit(q.Limit).Skip(q.Skip).Sort(q.Sort)
-	if err != nil { ... }
+	bsonSort, _ := q.Sort.([]bson.DocElem)
+	
+	sortFields := make([]string, len(bsonSort))
+	for i, s := range bsonSort {
+		sf := "-" + s.Key
+		sortFields[i] = sf[(s.(int)+1)/2:]
+	}
+
+	cursor := coll.Find(q.Filter).
+		Limit(int(q.Limit)).
+		Skip(int(q.Skip)).
+		Sort(sortFields...)
 
 	...
 }
