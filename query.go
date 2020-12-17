@@ -2,6 +2,8 @@ package query
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -36,7 +38,7 @@ type Query struct {
 	Filter M
 	// Sort is a document specifying the order in which documents should
 	// be returned.
-	Sort map[string]int
+	Sort interface{}
 	// Limit is the maximum number of documents to return.
 	Limit int64
 	// Skip is a number of documents to be skipped before adding documents
@@ -109,11 +111,9 @@ func (f *Query) AddFilter(field string, op operator, value interface{}) {
 }
 
 // AddSort adds a field to sort to the Sort document.
-func (f *Query) AddSort(val string) (fieldName string) {
-	if f.Sort == nil {
-		f.Sort = make(map[string]int)
-	}
-
+func (f *Query) AddSort(val string,
+	docElem func(string, interface{}) (interface{}, error)) (
+	fieldName string, err error) {
 	sortDirection := sortAsc
 
 	fieldName = strings.TrimPrefix(val, sortAscPrefix)
@@ -122,7 +122,22 @@ func (f *Query) AddSort(val string) (fieldName string) {
 		sortDirection, fieldName = sortDesc, fieldName[1:]
 	}
 
-	f.Sort[fieldName] = sortDirection
+	de, err := docElem(fieldName, sortDirection)
+	if err != nil {
+		return fieldName, fmt.Errorf("add sort: %w: %s: %d",
+			err, fieldName, sortDirection)
+	}
+
+	s := reflect.ValueOf(f.Sort)
+	deVal := reflect.ValueOf(de)
+
+	if f.Sort == nil {
+		s = reflect.MakeSlice(reflect.SliceOf(deVal.Type()), 0, 1)
+	}
+
+	s = reflect.Append(s, deVal)
+
+	f.Sort = s.Interface()
 
 	return
 }

@@ -1,11 +1,11 @@
 # URI to MongoDB Query
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/garantexpress/mongo-uri-query.svg)](https://pkg.go.dev/github.com/garantexpress/mongo-uri-query)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Denisss025/mongo-uri-query.svg)](https://pkg.go.dev/github.com/Denisss025/mongo-uri-query)
 [![Build Status](https://travis-ci.org/Denisss025/mongo-uri-query.svg?branch=master)](https://travis-ci.org/Denisss025/mongo-uri-query)
-[![Go Report](https://goreportcard.com/badge/garantexpress/mongo-uri-query)](https://goreportcard.com/report/garantexpress/mongo-uri-query)
-[![Maintainability](https://api.codeclimate.com/v1/badges/be2fde656b7fbc1e5795/maintainability)](https://codeclimate.com/github/garantexpress/mongo-uri-query/maintainability)
+[![Go Report](https://goreportcard.com/badge/Denisss025/mongo-uri-query)](https://goreportcard.com/report/Denisss025/mongo-uri-query)
+[![Maintainability](https://api.codeclimate.com/v1/badges/be2fde656b7fbc1e5795/maintainability)](https://codeclimate.com/github/Denisss025/mongo-uri-query/maintainability)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/5dcb97ef85e043fa0208/test_coverage)](https://codeclimate.com/github/Denisss025/mongo-uri-query/test_coverage)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/garantexpress/mongo-uri-query/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Denisss025/mongo-uri-query/blob/master/LICENSE)
 
 The URI to MongoDB query conversion library for Go
 programming language    .
@@ -20,12 +20,12 @@ The recommended way to get started using the URI to MongoDB Query
 library is by using go modules to install the dependency in your
 project.
 This can be done by importing packages from
-`github.com/garantexpress/mongo-uri-query` and having the build step
+`github.com/Denisss025/mongo-uri-query` and having the build step
 to install the dependency.
 
 Another way is to get the library by explicitly running
 ```SH
-go get github.com/garantexpress/mongo-uri-query
+go get github.com/Denisss025/mongo-uri-query
 ```
 
 ## Usage
@@ -54,52 +54,117 @@ Now the filter, sort, limit and skip can be alltogether used with
 MongoDB library, i.e. with an old
 [go-mgo/mgo](https://github.com/go-mgo/mgo) library.
 
+[go-mgo/mgo](https://github.com/go-mgo/mgo) package.
+
 ```Go
 package example
 
 import (
-    "net/http"
+	"errors"
+	"net/http"
 
-    query "github.com/garantexpress/mongo-uri-query"
+	query "github.com/Denisss025/mongo-uri-query"
 
-    "go.mongodb.org/mongo-driver/bson/primitive"
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
+	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/mgo.v2/mgo"
 )
 
-type MongoPrimitives struct {}
+type primitives struct{}
 
-func (p MongoPrimitives) ObjectID(val string) (interface{}, error) {
-    return primitive.ObjectIDFromHex(val)
+func (p primitives) ObjectID(val string) (oid interface{}, err error) {
+	if !bson.IsObjectIdHex(val) {
+		return nil, errors.New("not an ObjectIdHex")
+    }
+    
+    return bson.ObjectIdHex(val), nil
 }
 
-func (p MongoPrimitives) RegEx(val, opts string) (interface{}, error) {
-    return primitive.Regex{Pattern: val, Options: opts}, nil
+func (p primitives) RegEx(p, o string) (re interface{}, err error) {
+	return bson.RegEx{Pattern: p, Options: o}
+}
+
+func (p primitives) DocElem(k string, v interface{}) (
+	kv interface{}, err error) {
+	return bson.DocElem{Name: k, Value: v}, nil
 }
 
 type RequestHandler struct {
-    parser query.Parser
+	parser query.Parser
 }
 
 func NewHandler() *RequestHandler {
-    return &RequestHandler{parser: query.Parser{
-        Converter: query.NewDefaultConverter(MongoPrimitives{}),
-    }}
+	return &RequestHandler{parser: query.Parser{
+		Converter: query.NewDefaultConverter(primitives{}),
+	}}
 }
 
 func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    var coll *mongo.Collection
-    ...
-    q, err := h.parser.Parse(r.URL.Query())
-    if err != nil { ... }
+	var coll *mgo.Collection
+	...
+	q, err := h.parser.Parse(r.URL.Query())
+	if err != nil { ... }
 
-    cursor, err := coll.Find(r.Context(), q.Filter, &options.FindOptions{
-        Limit: &q.Limit,
-        Skip:  &q.Skip,
-        Sort:  q.Sort,
-    })
+	cursor, err := coll.Find(q.Filter).Limit(q.Limit).Skip(q.Skip).Sort(q.Sort)
+	if err != nil { ... }
 
-    ...
+	...
+}
+```
+
+MongoDB [driver](https://github.com/mongodb/mongo-go-driver)
+
+```Go
+package example
+
+import (
+	"errors"
+	"net/http"
+
+	query "github.com/Denisss025/mongo-uri-query"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type primitives struct{}
+
+func (p primitives) ObjectID(val string) (oid interface{}, err error) {
+	return primitive.ObjectIDFromHex(val)
+}
+
+func (p primitives) RegEx(p, o string) (re interface{}, err error) {
+    return primitive.Regex{Pattern: p, Options: o}, nil
+}
+
+func (p primitives) DocElem(k string, v interface{}) (
+	kv interface{}, err error) {
+	return primitive.E{Key: k, Value: v}, nil
+}
+
+type RequestHandler struct {
+	parser query.Parser
+}
+
+func NewHandler() *RequestHandler {
+	return &RequestHandler{parser: query.Parser{
+		Converter: query.NewDefaultConverter(primitives{}),
+	}}
+}
+
+func (h *RequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var coll *mongo.Collection
+	...
+	q, err := h.parser.Parse(r.URL.Query())
+	if err != nil { ... }
+
+	cursor, err := coll.Find(r.Context(), q.Filter, &options.FindOptions{
+		Limit: &q.Limit,
+		Skip:  &q.Skip,
+		Sort:  q.Sort,
+	})
+
+	...
 }
 ```
 
@@ -141,10 +206,14 @@ The `TypeConverter` also has a `Primitives` field which is used to convert strin
 type Primitives interface {
     RegEx(val, opts string) (interface{}, error)
     ObjectID(val string) (interface{}, error)
+    DocElem(key string, val interface{}) (interface{}, error)
 }
 ```
 
 The `RegEx()` function is used with `re`, `co` and `sw` operators.
+
+The `DocElem()` function is used with `__sort` directive. It allows to
+define sort order for `Sort()` function or for `FindOptions.Sort` field.
 
 ### Parse a query
 
@@ -168,5 +237,5 @@ The `Query{}` structure has `Filter`, `Sort`, `Limit` and `Skip` fields.
 ## License
 
 The URI to MongoDB Query library is licensed under the
-[MIT License](https://github.com/garantexpress/mongo-uri-query/blob/master/LICENCE).
+[MIT License](https://github.com/Denisss025/mongo-uri-query/blob/master/LICENCE).
 

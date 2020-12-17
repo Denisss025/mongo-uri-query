@@ -178,7 +178,7 @@ func (p *Parser) regEscape(val string) (escaped string) {
 
 func (p *Parser) regex(reOptions string, translate func(string) string) (
 	conv ConvertFunc) {
-	if p.Converter.Primitives == nil {
+	if p.Converter == nil || p.Converter.Primitives == nil {
 		return nil
 	}
 
@@ -198,11 +198,17 @@ func sw(f func(string) string) (translate func(string) string) {
 
 func (p *Parser) convert(field string, op operator, v []string) (
 	value interface{}, err error) {
+	const errMsg = "convert: %w: %v"
+
+	if !op.IsValid() {
+		return nil, fmt.Errorf(errMsg, ErrUnknownOperator, op)
+	}
+
 	conv, hasField := p.Fields.Converter(field)
 	if !hasField {
 		if p.ValidateFields {
 			return nil,
-				fmt.Errorf("%w: %s", ErrNoFieldSpec, field)
+				fmt.Errorf(errMsg, ErrNoFieldSpec, field)
 		}
 
 		conv = p.Converter
@@ -223,7 +229,7 @@ func (p *Parser) convert(field string, op operator, v []string) (
 
 	value, err = convertArray(v, op, conv)
 	if err != nil {
-		return nil, fmt.Errorf("convert %s: %w", field, err)
+		return nil, fmt.Errorf(errMsg, err, field)
 	}
 
 	return value, err
@@ -294,12 +300,21 @@ func (p *Parser) Parse(params url.Values) (filter Query, err error) {
 
 	sortFields := getSortFields(params)
 
-	for _, sort := range sortFields {
-		sortField := filter.AddSort(sort)
+	if len(sortFields) > 0 &&
+		(p.Converter == nil || p.Converter.Primitives == nil) {
+		errs = multierror.Append(errs, fmt.Errorf("no primitives: %w",
+			ErrNoSortField))
+	} else {
+		for _, sort := range sortFields {
+			sortField, sortErr := filter.AddSort(sort,
+				p.Converter.Primitives.DocElem)
 
-		if p.ValidateFields && !p.Fields.HasField(sortField) {
-			errs = multierror.Append(errs, fmt.Errorf(
-				"%w: %s", ErrNoSortField, sortField))
+			if sortErr != nil {
+				errs = multierror.Append(errs, sortErr)
+			} else if p.ValidateFields && !p.Fields.HasField(sortField) {
+				errs = multierror.Append(errs, fmt.Errorf(
+					"%w: %s", ErrNoSortField, sortField))
+			}
 		}
 	}
 

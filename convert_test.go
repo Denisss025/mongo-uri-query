@@ -28,7 +28,9 @@ type testRegEx struct {
 	regex, options string
 }
 
-type testOidPrimitive struct{}
+type testOidPrimitive struct {
+	forbidSortFields map[string]struct{}
+}
 
 func (t testOidPrimitive) RegEx(v, o string) (i interface{}, err error) {
 	return testRegEx{regex: v, options: o}, nil
@@ -36,6 +38,17 @@ func (t testOidPrimitive) RegEx(v, o string) (i interface{}, err error) {
 
 func (t testOidPrimitive) ObjectID(val string) (i interface{}, err error) {
 	return testObjectID{oid: val}, nil
+}
+
+func (t testOidPrimitive) DocElem(key string, val interface{}) (
+	kv interface{}, err error) {
+	if t.forbidSortFields != nil {
+		if _, forbid := t.forbidSortFields[key]; forbid {
+			return nil, ErrNoSortField
+		}
+	}
+
+	return map[string]interface{}{key: val}, nil
 }
 
 //nolint:paralleltest

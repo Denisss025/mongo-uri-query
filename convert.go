@@ -27,8 +27,12 @@ func (c ConvertFunc) Convert(val string) (i interface{}, err error) {
 
 // Primitives gives access to the RegEx and ObjectID convertors.
 type Primitives interface {
+	// RegEx converts pattern and options to bson.Regex.
 	RegEx(pattern, options string) (rx interface{}, err error)
+	// ObjectID converts val to bson.ObjectID.
 	ObjectID(val string) (oid interface{}, err error)
+	// DocElem converts key and val o bson.DocElem, which is a bson.D element.
+	DocElem(key string, val interface{}) (d interface{}, err error)
 }
 
 // String returns a string val.

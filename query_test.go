@@ -1,6 +1,7 @@
 package query
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,20 +11,40 @@ import (
 func TestAddSort(t *testing.T) {
 	var q Query
 
+	type KV struct {
+		K string
+		V interface{}
+	}
+
+	docElem := func(k string, v interface{}) (kv interface{}, err error) {
+		return KV{K: k, V: v}, nil
+	}
+
+	docElemErr := func(_ string, _ interface{}) (kv interface{}, err error) {
+		return nil, ErrNoSortField
+	}
+
 	assert.Nil(t, q.Sort)
 
-	q.AddSort("test")
-	assert.Len(t, q.Sort, 1)
-	assert.Equal(t, 1, q.Sort["test"])
+	f, err := q.AddSort("test", docElem)
+	assert.NoError(t, err)
+	assert.Equal(t, "test", f)
+	assert.Equal(t, []KV{{K: "test", V: 1}}, q.Sort)
 
-	q.AddSort("-test")
-	assert.Len(t, q.Sort, 1)
-	assert.Equal(t, -1, q.Sort["test"])
+	q.Sort = nil
+	f, err = q.AddSort("-test", docElem)
+	assert.NoError(t, err)
+	assert.Equal(t, "test", f)
+	assert.Equal(t, []KV{{K: "test", V: -1}}, q.Sort)
 
-	q.AddSort("field")
-	assert.Len(t, q.Sort, 2)
-	assert.Equal(t, -1, q.Sort["test"])
-	assert.Equal(t, 1, q.Sort["field"])
+	f, err = q.AddSort("field", docElem)
+	assert.NoError(t, err)
+	assert.Equal(t, "field", f)
+	assert.Equal(t, []KV{{K: "test", V: -1}, {K: "field", V: 1}}, q.Sort)
+
+	_, err = q.AddSort("-x", docElemErr)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrNoSortField))
 }
 
 //nolint:paralleltest

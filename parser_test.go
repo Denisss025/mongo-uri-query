@@ -141,6 +141,21 @@ func TestParserRegexEscape(ts *testing.T) {
 		acquired := p.regEscape(test)
 		assert.Equal(t, test, acquired)
 	})
+
+	ts.Run("regex should return nil", func(t *testing.T) {
+		t.Parallel()
+
+		conv := p.regex("i", nop())
+		assert.Nil(t, conv)
+	})
+
+	ts.Run("sort should not panic", func(t *testing.T) {
+		t.Parallel()
+
+		f, err := p.Parse(url.Values{"__sort": []string{"x"}})
+		assert.Error(t, err)
+		assert.Nil(t, f.Sort)
+	})
 }
 
 func TestParserConvert(ts *testing.T) {
@@ -169,7 +184,7 @@ func TestParserConvert(ts *testing.T) {
 
 		_, err := p2.convert("field4", operatorEquals, []string{"1"})
 		assert.EqualError(t, err,
-			fmt.Sprintf("%v: field4", ErrNoFieldSpec))
+			fmt.Sprintf("convert: %v: field4", ErrNoFieldSpec))
 	})
 
 	ts.Run("convertArray error", func(t *testing.T) {
@@ -177,7 +192,7 @@ func TestParserConvert(ts *testing.T) {
 
 		_, err := p2.convert("field3", operatorEquals, []string{"1"})
 		assert.EqualError(t, err,
-			fmt.Sprintf("convert field3: %v", ErrNoMatch))
+			fmt.Sprintf("convert: %v: field3", ErrNoMatch))
 	})
 
 	ts.Run("operator exists must be boolean", func(t *testing.T) {
@@ -189,7 +204,7 @@ func TestParserConvert(ts *testing.T) {
 
 		_, err = p.convert("test", operatorExists, []string{"1"})
 		assert.EqualError(t, err,
-			fmt.Sprintf("convert test: %v", ErrNoMatch))
+			fmt.Sprintf("convert: %v: test", ErrNoMatch))
 	})
 
 	ts.Run("regex operator", func(t *testing.T) {
@@ -221,6 +236,14 @@ func TestParserConvert(ts *testing.T) {
 		assert.Equal(t, []interface{}{
 			testRegEx{regex: "\\$,x", options: "i"},
 		}, val)
+	})
+
+	ts.Run("unknown operator", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := p.convert("test", operator("unknown[]"), []string{"a"})
+		assert.EqualError(t, err, fmt.Sprintf("convert: %v: %v",
+			ErrUnknownOperator, operator("unknown[]").CommonOperator()))
 	})
 }
 
@@ -308,14 +331,21 @@ func TestParserParse(ts *testing.T) {
 	ts.Parallel()
 
 	p := Parser{
-		Converter: NewDefaultConverter(testOidPrimitive{}),
-		Fields: Fields{
-			"required": Field{
-				Required:  true,
-				Converter: Bool(),
-			},
-		},
+		Converter: NewDefaultConverter(testOidPrimitive{
+			forbidSortFields: map[string]struct{}{"forbidden": {}},
+		}),
 		ValidateFields: true,
+	}
+
+	p.Fields = Fields{
+		"required": Field{
+			Required:  true,
+			Converter: Bool(),
+		},
+		"forbidden": Field{
+			Required:  false,
+			Converter: p.Converter,
+		},
 	}
 
 	ts.Run("bad skip parameter", func(t *testing.T) {
@@ -368,6 +398,18 @@ func TestParserParse(ts *testing.T) {
 		assert.Len(t, filter.Sort, 1)
 	})
 
+	ts.Run("error on AddSort()", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := p.Parse(url.Values{
+			"required": []string{"no"},
+			"__sort":   []string{"-forbidden"},
+		})
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrNoSortField))
+	})
+
 	ts.Run("bad field conversion", func(t *testing.T) {
 		t.Parallel()
 
@@ -381,7 +423,7 @@ func TestParserParse(ts *testing.T) {
 		assert.Nil(t, filter.Filter)
 		assert.Zero(t, filter.Limit)
 		assert.Zero(t, filter.Skip)
-		assert.Len(t, filter.Sort, 0)
+		assert.Nil(t, filter.Sort)
 	})
 
 	ts.Run("normal request", func(t *testing.T) {
@@ -395,7 +437,7 @@ func TestParserParse(ts *testing.T) {
 		assert.NoError(t, err)
 		assert.Zero(t, filter.Skip)
 		assert.Zero(t, filter.Limit)
-		assert.Equal(t, map[string]int{"required": -1}, filter.Sort)
+		assert.Equal(t, []map[string]interface{}{{"required": -1}}, filter.Sort)
 		assert.Equal(t, M{"required": M{"$exists": true}},
 			filter.Filter)
 	})
